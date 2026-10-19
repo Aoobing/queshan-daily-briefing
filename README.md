@@ -42,3 +42,4 @@ PUSHPLUS_TOKEN=xxxx node briefing.js --test
 - GitHub Actions 的 `schedule` 使用 UTC：`15 23 * * *` = 北京时间次日 07:15。
 - GitHub 定时任务在高峰期可能延迟数分钟到十几分钟，属正常现象。
 - 星座屋服务器使用旧式 TLS 重协商，脚本已显式开启 `SSL_OP_LEGACY_SERVER_CONNECT` 兼容。
+- 公开仓库连续 60 天无提交会被 GitHub 停用定时工作流，工作流内含每 30 天自动写入 .keepalive 的保活步骤。
