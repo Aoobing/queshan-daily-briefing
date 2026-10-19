@@ -1,0 +1,29 @@
+name: Queshan Daily Briefing
+
+on:
+  schedule:
+    # GitHub Actions 使用 UTC；07:15 Asia/Shanghai = 23:15 UTC 前一天
+    - cron: '15 23 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Send briefing
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          TZ: Asia/Shanghai
+        run: node briefing.js
