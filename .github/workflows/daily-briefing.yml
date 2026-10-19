@@ -4,8 +4,6 @@ on:
   schedule:
     # GitHub Actions 使用 UTC；07:15 Asia/Shanghai = 23:15 UTC 前一天
     - cron: '15 23 * * *'
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 permissions:
