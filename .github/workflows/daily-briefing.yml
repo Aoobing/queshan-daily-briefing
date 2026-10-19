@@ -20,6 +20,7 @@ jobs:
       # 公开仓库超过 60 天无提交会被 GitHub 自动停用定时工作流，
       # 这里每 30 天写一次 .keepalive 提交来保活。
       - name: Keep workflow alive
+        continue-on-error: true
         run: |
           if [ -f .keepalive ]; then
             age_days=$(( ( $(date +%s) - $(date -r .keepalive +%s) ) / 86400 ))
