@@ -12,6 +12,9 @@
  *   --test          发送，但标题标注「云端测试」
  */
 
+const fs = require('fs');
+const path = require('path');
+
 const TZ = 'Asia/Shanghai';
 const LOCATION = { name: '确山县', latitude: 32.802, longitude: 114.026, timezone: TZ };
 const SIGNS = [
@@ -317,24 +320,49 @@ async function sendPushPlus(title, content) {
   return json;
 }
 
+// state/ 只在本机/单次运行内有效（已被 .gitignore 忽略）；
+// sent-state.json 会随工作流提交进仓库，用于云端多个 cron 补跑点之间去重。
 const STATE_PATH = 'state/last-success.json';
-
+const SENT_STATE_PATH = 'sent-state.json';
 
 function writeState(messageId) {
-  const dir = require("path").dirname(STATE_PATH);
-  require("fs").mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
   const data = {
     date: todayKey(),
-    sentAt: new Date().toLocaleString("sv-SE", { timeZone: TZ }),
-    messageId: String(messageId || ""),
-    source: "github-actions",
+    sentAt: new Date().toLocaleString('sv-SE', { timeZone: TZ }),
+    messageId: String(messageId || ''),
+    source: 'github-actions',
   };
-  require("fs").writeFileSync(STATE_PATH, JSON.stringify(data, null, 2) + "\n", "utf8");
+  fs.writeFileSync(STATE_PATH, JSON.stringify(data, null, 2) + '\n', 'utf8');
   log(`已写入状态文件：${STATE_PATH}`);
 }
 
+function cloudAlreadySentToday() {
+  try {
+    const data = JSON.parse(fs.readFileSync(SENT_STATE_PATH, 'utf8'));
+    return Boolean(data && data.date === todayKey());
+  } catch {
+    return false;
+  }
+}
+
+function writeCloudSentState(messageId) {
+  const data = {
+    date: todayKey(),
+    sentAt: new Date().toLocaleString('sv-SE', { timeZone: TZ }),
+    messageId: String(messageId || ''),
+  };
+  fs.writeFileSync(SENT_STATE_PATH, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  log(`已写入云端去重状态：${SENT_STATE_PATH}`);
+}
+
 async function main() {
-  // 说明：本机任务与云端任务同时运行，允许同一天各推送一次，因此这里不做跨端去重。
+  // 本机与云端是两个独立渠道，允许同日各推送一次（不做跨端去重）；
+  // 但云端配置了多个 cron 时间点用于补跑，这里避免同一天重复发送。
+  if (cloudAlreadySentToday()) {
+    log('云端今日早报已发送过，跳过本次重试。');
+    return 0;
+  }
   log('开始获取天气数据');
   const weather = await getWeather();
   const { lines } = buildContent(weather);
@@ -378,6 +406,7 @@ async function main() {
   }
   log(`发送成功，messageId=${resp.data}`);
   writeState(resp.data);
+  writeCloudSentState(resp.data);
   return 0;
 }
 

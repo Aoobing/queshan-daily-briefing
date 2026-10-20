@@ -2,12 +2,24 @@ name: Queshan Daily Briefing
 
 on:
   schedule:
-    # GitHub Actions 使用 UTC；07:15 Asia/Shanghai = 23:15 UTC 前一天
+    # GitHub Actions 的 schedule 是"尽力而为"，高峰期可能延迟几十分钟甚至更久。
+    # 因此设置多个时间点：第一个成功发送后，后面的会自动跳过（见 sent-state.json）。
+    # UTC 23:15 = 北京 07:15
     - cron: '15 23 * * *'
+    # UTC 23:45 = 北京 07:45（补跑）
+    - cron: '45 23 * * *'
+    # UTC 00:15 = 北京 08:15（补跑）
+    - cron: '15 0 * * *'
+    # UTC 00:45 = 北京 08:45（补跑）
+    - cron: '45 0 * * *'
   workflow_dispatch: {}
 
 permissions:
   contents: write
+
+concurrency:
+  group: queshan-daily-briefing
+  cancel-in-progress: false
 
 jobs:
   briefing:
@@ -16,25 +28,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # 公开仓库超过 60 天无提交会被 GitHub 自动停用定时工作流，
-      # 这里每 30 天写一次 .keepalive 提交来保活。
-      - name: Keep workflow alive
-        continue-on-error: true
-        run: |
-          if [ -f .keepalive ]; then
-            age_days=$(( ( $(date +%s) - $(date -r .keepalive +%s) ) / 86400 ))
-            if [ "$age_days" -lt 30 ]; then
-              echo "keepalive 仍然新鲜（${age_days} 天），跳过。"
-              exit 0
-            fi
-          fi
-          date -u +"%Y-%m-%dT%H:%M:%SZ" > .keepalive
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .keepalive
-          git commit -m "chore: keepalive $(date -u +%Y-%m-%d)"
-          git push
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -46,3 +39,28 @@ jobs:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           TZ: Asia/Shanghai
         run: node briefing.js
+
+      # 提交 sent-state.json（当日已发送记录，用于跳过同日后面的补跑点）
+      # 并每 30 天写一次 .keepalive，避免公开仓库 60 天无提交被停用定时任务。
+      - name: Persist state
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ -f .keepalive ]; then
+            age_days=$(( ( $(date +%s) - $(date -r .keepalive +%s) ) / 86400 ))
+          else
+            age_days=999
+          fi
+          if [ "$age_days" -ge 30 ]; then
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > .keepalive
+          fi
+
+          git add -A sent-state.json .keepalive 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "没有需要提交的状态变更。"
+            exit 0
+          fi
+          git commit -m "chore: update briefing state $(date -u +%Y-%m-%d)"
+          git push
